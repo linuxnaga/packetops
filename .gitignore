@@ -11,3 +11,4 @@ frontend/dist/
 !backend/fixtures/training/*.pcapng
 !backend/tests/data/*.pcap
 !backend/tests/data/*.pcapng
+*.tsbuildinfo

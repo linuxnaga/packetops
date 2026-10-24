@@ -100,7 +100,6 @@ services:
     volumes: ["evidence:/data/storage"]
     tmpfs: ["/data/work:size=16g", "/data/cache:size=4g", "/tmp:size=512m"]
     networks: [backend]         # no egress: dissection of untrusted captures never reaches the internet
-    pids_limit: 512
     depends_on:
       migrate: { condition: service_completed_successfully }
       redis: { condition: service_healthy }
@@ -111,7 +110,7 @@ services:
       retries: 3
     deploy:
       resources:
-        limits: { cpus: "4", memory: 8g }
+        limits: { cpus: "4", memory: 8g, pids: 512 }
 
   beat:
     image: packetops-backend:local

@@ -18,14 +18,20 @@ request_id_var: contextvars.ContextVar[str | None] = contextvars.ContextVar("req
 tenant_id_var: contextvars.ContextVar[str | None] = contextvars.ContextVar("tenant_id", default=None)
 job_id_var: contextvars.ContextVar[str | None] = contextvars.ContextVar("job_id", default=None)
 
-_TOKEN_RE = re.compile(r"(?i)(bearer\s+)[A-Za-z0-9._~+/=-]+")
+_TOKEN_RE = re.compile(r"(?i)(bearer\s+|access_token=|token=)[A-Za-z0-9._~+/%=-]+")
 _RESERVED = set(vars(logging.makeLogRecord({})).keys()) | {"message", "asctime"}
 
 
 class RedactingFilter(logging.Filter):
+    """Masks bearer tokens and token query parameters (the SSE URL carries one) in the rendered message."""
+
     def filter(self, record: logging.LogRecord) -> bool:
-        if isinstance(record.msg, str) and "earer" in record.msg:
-            record.msg = _TOKEN_RE.sub(r"\1[REDACTED]", record.msg)
+        try:
+            msg = record.getMessage()
+        except Exception:  # noqa: BLE001 - a malformed record must not break logging
+            return True
+        if "earer" in msg or "token=" in msg:
+            record.msg, record.args = _TOKEN_RE.sub(r"\1[REDACTED]", msg), None
         return True
 
 
@@ -56,5 +62,10 @@ def configure_logging(level: str = "INFO") -> None:
     root = logging.getLogger()
     root.handlers[:] = [handler]
     root.setLevel(level.upper())
+    # uvicorn installs its own handlers (the access log prints full URLs); route them through ours.
+    for name in ("uvicorn", "uvicorn.error", "uvicorn.access"):
+        lg = logging.getLogger(name)
+        lg.handlers[:] = []
+        lg.propagate = True
     for noisy in ("pymongo", "botocore", "urllib3", "s3transfer"):
         logging.getLogger(noisy).setLevel("WARNING")

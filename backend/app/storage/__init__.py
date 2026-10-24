@@ -124,12 +124,14 @@ class S3Storage(Storage):
         s = get_settings()
         self.bucket = s.s3_bucket
         self.sse = s.s3_server_side_encryption
+        # Compose passes unset variables as empty strings; treat them as unset so AWS endpoints
+        # and instance-role credentials are used.
         self.client = boto3.client(
             "s3",
-            endpoint_url=s.s3_endpoint_url,
+            endpoint_url=s.s3_endpoint_url or None,
             region_name=s.s3_region,
-            aws_access_key_id=s.s3_access_key,
-            aws_secret_access_key=s.s3_secret_key,
+            aws_access_key_id=s.s3_access_key or None,
+            aws_secret_access_key=s.s3_secret_key or None,
         )
 
     def ensure_bucket(self) -> None:

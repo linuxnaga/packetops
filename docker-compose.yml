@@ -1,0 +1,144 @@
+# F5 PacketOps — local/single-host deployment.
+#   cp .env.example .env && docker compose up --build
+# UI: http://localhost:8080   API docs: http://localhost:8080/api/docs
+#
+# Network layout:
+#   edge     — frontend (nginx) and api; the only network with published ports
+#   backend  — internal: true, so containers on it alone have no route to the internet.
+#              The analysis worker is attached ONLY to this network (no egress).
+name: packetops
+
+x-backend-env: &backend-env
+  PKO_APP_ENV: ${PKO_APP_ENV:-development}
+  PKO_LOG_LEVEL: ${PKO_LOG_LEVEL:-INFO}
+  PKO_MONGO_URI: mongodb://mongo:27017
+  PKO_MONGO_DB: packetops
+  PKO_REDIS_URL: redis://redis:6379/0
+  # Evidence storage: a shared volume by default; set PKO_STORAGE_BACKEND=s3 and the PKO_S3_* variables for S3-compatible storage.
+  PKO_STORAGE_BACKEND: ${PKO_STORAGE_BACKEND:-local}
+  PKO_STORAGE_LOCAL_ROOT: /data/storage
+  PKO_S3_ENDPOINT_URL: ${PKO_S3_ENDPOINT_URL:-}
+  PKO_S3_BUCKET: ${PKO_S3_BUCKET:-packetops-evidence}
+  PKO_S3_REGION: ${PKO_S3_REGION:-us-east-1}
+  PKO_S3_ACCESS_KEY: ${PKO_S3_ACCESS_KEY:-}
+  PKO_S3_SECRET_KEY: ${PKO_S3_SECRET_KEY:-}
+  PKO_AUTH_MODE: ${PKO_AUTH_MODE:-dev}
+  PKO_DEV_JWT_SECRET: ${PKO_DEV_JWT_SECRET:?set PKO_DEV_JWT_SECRET in .env}
+  PKO_OIDC_ISSUER: ${PKO_OIDC_ISSUER:-}
+  PKO_OIDC_AUDIENCE: ${PKO_OIDC_AUDIENCE:-}
+  PKO_OIDC_CLIENT_ID: ${PKO_OIDC_CLIENT_ID:-}
+  PKO_OIDC_JWKS_URL: ${PKO_OIDC_JWKS_URL:-}
+  PKO_LLM_PROVIDER: ${PKO_LLM_PROVIDER:-none}
+  PKO_LLM_BASE_URL: ${PKO_LLM_BASE_URL:-}
+  PKO_LLM_API_KEY: ${PKO_LLM_API_KEY:-}
+  PKO_LLM_MODEL: ${PKO_LLM_MODEL:-}
+  PKO_CORS_ORIGINS: ${PKO_CORS_ORIGINS:-http://localhost:8080}
+  PKO_MAX_UPLOAD_BYTES: ${PKO_MAX_UPLOAD_BYTES:-2147483648}
+
+x-hardening: &hardening
+  security_opt: ["no-new-privileges:true"]
+  cap_drop: ["ALL"]
+  read_only: true
+  restart: unless-stopped
+
+services:
+  mongo:
+    image: mongo:7.0.20
+    command: ["--bind_ip_all", "--quiet"]
+    volumes: ["mongo-data:/data/db"]
+    networks: [backend]
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  redis:
+    image: redis:7.4.3-alpine
+    command: ["redis-server", "--appendonly", "yes", "--save", "60", "1000"]
+    volumes: ["redis-data:/data"]
+    networks: [backend]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  migrate:
+    build: ./backend
+    image: packetops-backend:local
+    command: ["sh", "-c", "python -m app.db.migrations && if [ \"$${PKO_AUTH_MODE}\" = dev ]; then python -m app.seed; fi"]
+    environment: *backend-env
+    volumes: ["evidence:/data/storage"]
+    networks: [backend]
+    depends_on:
+      mongo: { condition: service_healthy }
+    restart: "no"
+
+  api:
+    image: packetops-backend:local
+    environment: *backend-env
+    <<: *hardening
+    volumes: ["evidence:/data/storage"]
+    tmpfs: ["/data/work:size=4g", "/data/cache:size=2g", "/tmp:size=256m"]
+    networks: [edge, backend]   # edge is needed only for OIDC JWKS and an external AI provider
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      redis: { condition: service_healthy }
+    deploy:
+      resources:
+        limits: { cpus: "2", memory: 2g }
+
+  worker:
+    image: packetops-backend:local
+    command: ["celery", "-A", "app.worker.celery_app:celery_app", "worker", "-Q", "analysis,maintenance", "--concurrency", "2",
+              "--max-tasks-per-child", "50", "-l", "INFO"]
+    environment: *backend-env
+    <<: *hardening
+    volumes: ["evidence:/data/storage"]
+    tmpfs: ["/data/work:size=16g", "/data/cache:size=4g", "/tmp:size=512m"]
+    networks: [backend]         # no egress: dissection of untrusted captures never reaches the internet
+    pids_limit: 512
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      redis: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "celery", "-A", "app.worker.celery_app:celery_app", "inspect", "ping", "--timeout", "5"]
+      interval: 60s
+      timeout: 15s
+      retries: 3
+    deploy:
+      resources:
+        limits: { cpus: "4", memory: 8g }
+
+  beat:
+    image: packetops-backend:local
+    command: ["celery", "-A", "app.worker.celery_app:celery_app", "beat", "-l", "INFO", "--schedule", "/tmp/celerybeat-schedule"]
+    environment: *backend-env
+    <<: *hardening
+    tmpfs: ["/tmp:size=16m"]
+    networks: [backend]
+    depends_on:
+      redis: { condition: service_healthy }
+
+  frontend:
+    build: ./frontend
+    image: packetops-frontend:local
+    ports: ["${PKO_HTTP_PORT:-8080}:8080"]
+    networks: [edge]
+    <<: *hardening
+    tmpfs: ["/tmp:size=32m", "/var/cache/nginx:size=64m", "/var/run:size=1m"]
+    depends_on:
+      api: { condition: service_healthy }
+
+networks:
+  edge: {}
+  backend:
+    internal: true
+
+volumes:
+  mongo-data: {}
+  redis-data: {}
+  evidence: {}

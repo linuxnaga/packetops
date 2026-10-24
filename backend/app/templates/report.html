@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'">
+<title>PacketOps report · {{ r.capture.filename }}</title>
+<style>
+  :root { --fg:#1c1f24; --muted:#5b6370; --line:#d9dde3; --bg:#ffffff; --panel:#f5f7fa; --crit:#9f1239; --high:#b42318; --med:#b54708; --low:#175cd3; --info:#475467; }
+  @media (prefers-color-scheme: dark) { :root { --fg:#e6e8eb; --muted:#9aa3ae; --line:#2e343c; --bg:#111418; --panel:#181c21; } }
+  body { font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; color: var(--fg); background: var(--bg); margin: 0; }
+  main { max-width: 960px; margin: 0 auto; padding: 24px 16px 64px; }
+  h1 { font-size: 24px; margin: 0 0 4px; } h2 { font-size: 18px; border-bottom: 1px solid var(--line); padding-bottom: 4px; margin-top: 32px; }
+  h3 { font-size: 15px; margin: 0 0 4px; }
+  .muted { color: var(--muted); } .mono, code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+  pre { background: var(--panel); border: 1px solid var(--line); padding: 8px; overflow-x: auto; white-space: pre-wrap; }
+  table { border-collapse: collapse; width: 100%; margin: 8px 0; } th, td { border: 1px solid var(--line); padding: 4px 6px; text-align: left; vertical-align: top; font-size: 12.5px; }
+  th { background: var(--panel); }
+  .banner { background: #fff4e5; color: #7a2e0e; border: 1px solid #f5c08a; padding: 8px 12px; border-radius: 6px; font-weight: 600; }
+  .finding { border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; margin: 14px 0; background: var(--panel); }
+  .sev { display: inline-block; padding: 1px 8px; border-radius: 10px; color: #fff; font-size: 11px; font-weight: 700; text-transform: uppercase; }
+  .sev.critical { background: var(--crit); } .sev.high { background: var(--high); } .sev.medium { background: var(--med); } .sev.low { background: var(--low); } .sev.info { background: var(--info); }
+  dl.kv { display: grid; grid-template-columns: 180px 1fr; gap: 2px 12px; } dl.kv dt { color: var(--muted); } dl.kv dd { margin: 0; word-break: break-all; }
+  @media (max-width: 600px) { dl.kv { grid-template-columns: 1fr; } }
+  @media print { .finding { break-inside: avoid; } body { background: #fff; color: #000; } }
+</style>
+</head>
+<body>
+<main>
+<h1>F5 PacketOps — Forensic Report</h1>
+<p class="muted">Generated {{ r.generated_at }} by {{ r.generated_by }} · report {{ r.report_id }}</p>
+{% if r.synthetic_training_data %}<p class="banner">SYNTHETIC TRAINING DATA — this capture was generated for a training mission and is not evidence from a real network.</p>{% endif %}
+
+<h2>Executive summary</h2>
+{% for line in r.executive_summary %}<p>{{ line }}</p>{% endfor %}
+
+<h2>Capture</h2>
+<dl class="kv">
+  <dt>File</dt><dd>{{ r.capture.filename }}</dd>
+  <dt>SHA-256</dt><dd class="mono">{{ r.capture.sha256 }}</dd>
+  <dt>Size / format</dt><dd>{{ r.capture.size_bytes }} bytes · {{ r.capture.format }}</dd>
+  <dt>First / last packet</dt><dd>{{ r.capture.first_packet }} → {{ r.capture.last_packet }}</dd>
+  <dt>Capture point</dt><dd>{{ r.capture.capture_point or "not stated" }}</dd>
+  <dt>Interfaces</dt><dd>{{ (r.capture.interfaces or [])|select|join(", ") or "-" }}</dd>
+  {% if r.capture.stats %}<dt>Packets / conversations</dt><dd>{{ r.capture.stats.packets }} packets · {{ r.capture.stats.tcp_conversations }} TCP · {{ r.capture.stats.udp_conversations }} UDP</dd>{% endif %}
+  {% if r.capture.comments %}<dt>File comments</dt><dd>{{ r.capture.comments|join(" · ") }}</dd>{% endif %}
+</dl>
+
+{% if r.protocols %}
+<h2>Protocols and endpoints</h2>
+<table><tr><th>Protocol</th><th>Packets</th></tr>{% for p in r.protocols %}<tr><td>{{ p.name }}</td><td>{{ p.packets }}</td></tr>{% endfor %}</table>
+<table><tr><th>Endpoint</th><th>Packets sent</th><th>Bytes sent</th><th>Packets received</th><th>Bytes received</th></tr>
+{% for e in r.top_endpoints %}<tr><td class="mono">{{ e.ip }}</td><td>{{ e.packets_tx }}</td><td>{{ e.bytes_tx }}</td><td>{{ e.packets_rx }}</td><td>{{ e.bytes_rx }}</td></tr>{% endfor %}</table>
+{% endif %}
+
+<h2>Methodology</h2>
+<ul>{% for m in r.methodology %}<li>{{ m }}</li>{% endfor %}</ul>
+
+<h2>Limitations</h2>
+<ul>{% for l in r.limitations %}<li>{{ l }}</li>{% else %}<li>No capture-level limitations were recorded.</li>{% endfor %}</ul>
+
+<h2>Findings ({{ r.findings|length }})</h2>
+{% for f in r.findings %}
+<section class="finding" id="{{ f.id }}">
+  <h3><span class="sev {{ f.severity }}">{{ f.severity }}</span> {{ f.id }} · {{ f.title }}</h3>
+  <p class="muted">Confidence {{ f.confidence.level }} ({{ f.confidence.score }}) — {{ f.confidence.rationale }}<br>Rule {{ f.rule_id }} v{{ f.rule_version }} · status {{ f.status }} · flows {{ f.flows|join(", ") }}</p>
+  <p>{{ f.summary }}</p>
+  <strong>Observed facts</strong>
+  <ul>{% for o in f.observations %}<li>{{ o.text }}{% if o.frames %} <span class="muted mono">[{% for x in o.frames[:12] %}#{{ x }}{% if not loop.last %}, {% endif %}{% endfor %}]</span>{% endif %}</li>{% endfor %}</ul>
+  <p><strong>Interpretation:</strong> {{ f.assessment }}</p>
+  <p><strong>Probable cause (hypothesis):</strong> {{ f.probable_cause }}</p>
+  {% if f.alternatives %}<strong>Alternative explanations</strong><ul>{% for a in f.alternatives %}<li>{{ a }}</li>{% endfor %}</ul>{% endif %}
+  {% if f.evidence %}<table><tr><th>Frame</th><th>Time</th><th>Role</th></tr>{% for e in f.evidence[:40] %}<tr><td class="mono">#{{ e.frame }}</td><td class="mono">{{ e.time }}</td><td>{{ e.role }}</td></tr>{% endfor %}</table>{% endif %}
+  {% if f.timeline %}<details><summary>Timeline ({{ f.timeline|length }} events)</summary><table>{% for e in f.timeline %}<tr><td class="mono">{{ e.time }}</td><td class="mono">{% if e.frame %}#{{ e.frame }}{% endif %}</td><td>{{ e.event }}</td></tr>{% endfor %}</table></details>{% endif %}
+  {% if f.verification %}<strong>Verification steps</strong>{% for v in f.verification %}<p class="muted">{{ v.purpose }} — {{ v.where }}</p><pre>{{ v.command }}</pre>{% endfor %}{% endif %}
+  {% if f.remediation %}<strong>Remediation options</strong><ul>{% for x in f.remediation %}<li>{{ x.action }} <span class="muted">Risk: {{ x.risk }}</span></li>{% endfor %}</ul>{% endif %}
+  {% if f.missing_evidence %}<p><strong>Missing evidence:</strong> {{ f.missing_evidence|join("; ") }}</p>{% endif %}
+  {% if f.limitations %}<p class="muted"><strong>Limitations:</strong> {{ f.limitations|join("; ") }}</p>{% endif %}
+  {% if f.f5_relevance %}<p><strong>BIG-IP relevance:</strong> {{ f.f5_relevance }}</p>{% endif %}
+  {% if f.notes %}<strong>Analyst notes</strong><ul>{% for n in f.notes %}<li>{{ n.text }} <span class="muted">— {{ n.by }}, {{ n.at }}</span></li>{% endfor %}</ul>{% endif %}
+</section>
+{% else %}
+<p>No detection rule produced a finding.</p>
+{% endfor %}
+
+{% if r.f5.correlations or r.f5.trailer_frames %}
+<h2>BIG-IP analysis</h2>
+<p>F5 Ethernet trailer frames in this capture: {{ r.f5.trailer_frames }}</p>
+{% for c in r.f5.correlations %}
+<h3>Correlation {{ c.id }}</h3>
+<p class="muted">Metadata: {{ c.config_name or "none supplied" }} · Evidence of BIG-IP: {{ c.bigip_evidence|join("; ") or "none" }}</p>
+<table><tr><th>Client-side</th><th>Server-side</th><th>Virtual / pool</th><th>Method</th><th>Confidence</th><th>First reset</th></tr>
+{% for p in c.pairs %}<tr><td class="mono">{{ p.client_flow }} {{ p.client }} → {{ p.vip }}</td><td class="mono">{{ p.server_flow }} {{ p.snat }} → {{ p.member }}</td><td>{{ p.virtual or "-" }} / {{ p.pool or "-" }}</td><td>{{ p.method }}</td><td>{{ p.confidence }}</td><td>{{ p.first_reset_side or "-" }}</td></tr>{% endfor %}</table>
+<ul>{% for o in c.observations %}<li>{{ o }}</li>{% endfor %}</ul>
+<p class="muted">{{ c.limitations|join(" ") }}</p>
+{% endfor %}
+{% endif %}
+
+{% if r.ai_synthesis %}
+<h2>AI-assisted synthesis</h2>
+<p class="muted">Generated by {{ r.ai_synthesis.provider }}{% if r.ai_synthesis.model %} ({{ r.ai_synthesis.model }}){% endif %} on {{ r.ai_synthesis.created_at }}. It interprets the deterministic findings above; every address and frame it cites was checked against the evidence.</p>
+{% for para in r.ai_synthesis.text.split("\n") %}{% if para.strip() %}<p>{{ para }}</p>{% endif %}{% endfor %}
+{% endif %}
+
+<h2>Reproducibility</h2>
+<dl class="kv">
+  <dt>Engine</dt><dd>{{ r.reproducibility.engine_version }}</dd>
+  <dt>Dissector</dt><dd>{{ r.reproducibility.dissector }}</dd>
+  <dt>Analysis job</dt><dd class="mono">{{ r.reproducibility.analysis_job_id }}</dd>
+  <dt>Rules</dt><dd>{% for x in r.reproducibility.rules %}{{ x.rule_id }} v{{ x.version }}{% if not loop.last %}, {% endif %}{% else %}none fired{% endfor %}</dd>
+</dl>
+<ol>{% for s in r.reproducibility.steps %}<li class="mono">{{ s }}</li>{% endfor %}</ol>
+</main>
+</body>
+</html>

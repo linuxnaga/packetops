@@ -1,0 +1,180 @@
+{
+  "baseline": {
+    "title": "Baseline healthy traffic",
+    "expected": {
+      "rules_absent": [
+        "TCP-001",
+        "TLS-001",
+        "DNS-001",
+        "HTTP-001"
+      ],
+      "tcp_flows": 2,
+      "dns_transactions": 1
+    },
+    "files": [
+      "baseline.pcapng"
+    ],
+    "synthetic": true
+  },
+  "tcp-handshake": {
+    "title": "TCP handshake failure",
+    "expected": {
+      "rules_present": [
+        "TCP-001",
+        "TCP-002"
+      ],
+      "unanswered_syn": {
+        "dst": "192.0.2.10:443",
+        "syn_count": 4
+      },
+      "rejected_syn": {
+        "dst": "192.0.2.10:8443"
+      }
+    },
+    "files": [
+      "tcp-handshake.pcapng"
+    ],
+    "synthetic": true
+  },
+  "retransmission": {
+    "title": "Retransmission and suspected packet loss",
+    "expected": {
+      "rules_present": [
+        "TCP-003",
+        "TCP-004"
+      ]
+    },
+    "files": [
+      "retransmission.pcapng"
+    ],
+    "synthetic": true
+  },
+  "tls-failure": {
+    "title": "TLS negotiation failure",
+    "expected": {
+      "rules_present": [
+        "TLS-001",
+        "TLS-004",
+        "TLS-005"
+      ],
+      "alerts": [
+        "certificate_expired",
+        "handshake_failure"
+      ],
+      "sni": "portal.example.com"
+    },
+    "files": [
+      "tls-failure.pcapng"
+    ],
+    "synthetic": true
+  },
+  "dns-timeout": {
+    "title": "DNS timeout",
+    "expected": {
+      "rules_present": [
+        "DNS-001",
+        "DNS-002",
+        "DNS-003",
+        "DNS-004"
+      ],
+      "unanswered_name": "api.example.com",
+      "unanswered_queries": 4
+    },
+    "files": [
+      "dns-timeout.pcapng"
+    ],
+    "synthetic": true
+  },
+  "http-latency": {
+    "title": "HTTP latency",
+    "expected": {
+      "rules_present": [
+        "HTTP-001",
+        "HTTP-002"
+      ],
+      "slow_uri": "/api/orders"
+    },
+    "files": [
+      "http-latency.pcapng"
+    ],
+    "synthetic": true
+  },
+  "connection-reset": {
+    "title": "Unexpected connection reset",
+    "expected": {
+      "rules_present": [
+        "TCP-006"
+      ],
+      "reset_by": "192.0.2.50:8080"
+    },
+    "files": [
+      "connection-reset.pcapng"
+    ],
+    "synthetic": true
+  },
+  "asymmetric-routing": {
+    "title": "Asymmetric routing investigation",
+    "expected": {
+      "rules_present": [
+        "TCP-009"
+      ]
+    },
+    "files": [
+      "asymmetric-routing.pcapng"
+    ],
+    "synthetic": true
+  },
+  "mtu-pmtud": {
+    "title": "MTU / PMTUD failure",
+    "expected": {
+      "rules_present": [
+        "TCP-008"
+      ]
+    },
+    "files": [
+      "mtu-pmtud.pcapng"
+    ],
+    "synthetic": true
+  },
+  "snat-correlation": {
+    "title": "BIG-IP SNAT correlation",
+    "expected": {
+      "pairs": 3,
+      "snat": "10.2.2.5",
+      "member_for_50002": "10.2.2.21:8443"
+    },
+    "files": [
+      "snat-correlation-client.pcapng",
+      "snat-correlation-server.pcapng"
+    ],
+    "config": "bigip-config.json",
+    "synthetic": true
+  },
+  "capture-comparison": {
+    "title": "Client-side/server-side capture comparison",
+    "expected": {
+      "pairs": 2,
+      "failing_member": "10.2.2.21:8080",
+      "first_reset_side": "server"
+    },
+    "files": [
+      "capture-comparison-client.pcapng",
+      "capture-comparison-server.pcapng"
+    ],
+    "config": "bigip-config.json",
+    "synthetic": true
+  },
+  "pool-member": {
+    "title": "Pool-member connectivity investigation",
+    "expected": {
+      "silent_member": "10.2.2.21:8080",
+      "refusing_member": "10.2.2.22:8080",
+      "trailer_pairs": 3
+    },
+    "files": [
+      "pool-member.pcapng"
+    ],
+    "config": "bigip-config.json",
+    "synthetic": true
+  }
+}

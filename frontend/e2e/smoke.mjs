@@ -28,6 +28,8 @@ if (process.env.PKO_E2E_DEBUG) page.on("response", async (r) => { if (r.url().in
 page.on("pageerror", (e) => consoleErrors.push(String(e)));
 // CSP violations and failed script loads surface only as console errors.
 page.on("console", (m) => { if (m.type() === "error" && /Content Security Policy|Refused to/.test(m.text())) consoleErrors.push(m.text()); });
+// Navigate through the sidebar only: page content can repeat a link name (e.g. an empty state linking to the Workbench).
+const nav = (name) => page.getByRole("navigation", { name: "Main" }).getByRole("link", { name, exact: true }).click();
 const api = async (method, p, body) => page.evaluate(async ([m, url, b]) => {
   const r = await fetch(`/api/v1${url}`, { method: m, headers: { Authorization: `Bearer ${localStorage.getItem("packetops.token")}`, ...(b ? { "Content-Type": "application/json" } : {}) }, body: b ? JSON.stringify(b) : undefined });
   return r.status === 204 ? null : r.json();
@@ -42,7 +44,7 @@ try {
   await shot(page, "01-overview");
 
   step(`upload ${path.basename(PCAP)}`);
-  await page.getByRole("link", { name: "PCAP Workbench" }).click();
+  await nav("PCAP Workbench");
   await page.locator('input[type="file"]').setInputFiles(PCAP);
   await page.getByRole("button", { name: "Upload and analyse" }).click();
   await page.locator("text=/●\\s*analyzed/").first().waitFor({ timeout: 120_000 });
@@ -62,20 +64,20 @@ try {
   await shot(page, "02-workbench");
 
   step("flows");
-  await page.getByRole("link", { name: "Flow Explorer" }).click();
+  await nav("Flow Explorer");
   await page.getByRole("heading", { name: /Flow Explorer/ }).waitFor();
   await page.waitForTimeout(800);
   await shot(page, "03-flows");
 
   step("findings");
-  await page.getByRole("link", { name: "Findings", exact: true }).click();
+  await nav("Findings");
   await page.waitForTimeout(1200);
   const findings = await api("GET", `/captures/${captureId}/findings`);
   console.log(`  ${findings.total ?? findings.items?.length} finding(s): ${(findings.items ?? []).map((f) => f.rule_id).join(", ")}`);
   await shot(page, "04-findings");
 
   step("Command Deck");
-  await page.getByRole("link", { name: "Command Deck" }).click();
+  await nav("Command Deck");
   const input = page.getByLabel("Console command");
   for (const cmd of ["pcap inspect", "tcp handshakes", "findings list"]) {
     await input.fill(cmd);
@@ -93,7 +95,7 @@ try {
   await shot(page, "05-console");
 
   step("training mission: tcp-handshake");
-  await page.getByRole("link", { name: "Training" }).click();
+  await nav("Training");
   const card = page.locator("div.rounded-md", { has: page.getByRole("heading", { name: "TCP handshake failure" }) });
   await page.waitForLoadState("networkidle");
   const startBtn = card.getByRole("button");
@@ -128,15 +130,15 @@ try {
   await shot(page, "07-reports");
 
   step("BIG-IP and help screens render");
-  await page.getByRole("link", { name: "BIG-IP" }).click();
+  await nav("BIG-IP");
   await page.getByRole("heading", { name: "BIG-IP intelligence" }).waitFor();
   await shot(page, "08-bigip");
-  await page.getByRole("link", { name: "Rules & help" }).click();
+  await nav("Rules & help");
   await page.getByText(/Detection rules \(\d+\)/).waitFor();
 
   step("dark theme");
   await page.getByRole("button", { name: "Toggle colour theme" }).click();
-  await page.getByRole("link", { name: "Command Deck" }).click();
+  await nav("Command Deck");
   await shot(page, "09-console-dark");
 
   if (consoleErrors.length) throw new Error(`page errors:\n${consoleErrors.join("\n")}`);

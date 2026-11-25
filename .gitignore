@@ -1,0 +1,14 @@
+.env
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+backend/var/
+node_modules/
+frontend/dist/
+*.pcap
+*.pcapng
+!backend/fixtures/training/*.pcapng
+!backend/tests/data/*.pcap
+!backend/tests/data/*.pcapng
+*.tsbuildinfo

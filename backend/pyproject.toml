@@ -1,0 +1,26 @@
+[project]
+name = "f5-packetops-backend"
+version = "1.0.0"
+description = "F5 PacketOps: PCAP forensics, BIG-IP flow intelligence and gamified troubleshooting"
+requires-python = ">=3.12"
+
+[tool.ruff]
+line-length = 150
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "S", "BLE"]
+ignore = ["S101", "S603", "S607", "S311", "B008", "UP007", "UP038"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S", "B"]
+"app/training/*" = ["S"]
+# Rule and console modules carry long human-readable evidence and guidance strings.
+"app/analysis/rules/*" = ["E501"]
+"app/console/commands.py" = ["E501"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+asyncio_default_fixture_loop_scope = "function"
+markers = ["integration: needs MongoDB and tshark"]

@@ -1,0 +1,21 @@
+# Runtime dependencies (pinned). Install: pip install -r requirements.txt
+fastapi==0.115.12
+uvicorn[standard]==0.34.2
+pydantic==2.11.4
+pydantic-settings==2.9.1
+pymongo==4.13.0
+celery==5.5.2
+redis==5.2.1
+pyarrow==20.0.0
+boto3==1.38.23
+python-multipart==0.0.20
+pyjwt[crypto]==2.10.1
+cryptography==50.0.2
+httpx==0.28.1
+anyio==4.15.1
+jinja2==3.1.6
+reportlab==4.4.1
+prometheus-client==0.22.0
+anthropic==2.2.0
+# Synthetic training-capture generator (packet crafting only; never used to parse evidence)
+scapy==2.6.1
